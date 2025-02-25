@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-# In[19]:
+# In[1]:
 
 
 import numpy as np
@@ -19,30 +19,11 @@ data.isnull().sum()
 # plt.figure(figsize=(7, 3))
 # data.boxplot()
 
-#Skewness Reduction
+# Skewness Reduction: Apply Robust Scaling to handle outliers
+from sklearn.preprocessing import RobustScaler, LabelEncoder
+scaler = RobustScaler()
+data[['Temprature', 'Colour', 'pH']] = scaler.fit_transform(data[['Temprature', 'Colour', 'pH']])
 
-quantile1=data["Temprature"].quantile(0.25)
-quantile2=data["Temprature"].quantile(0.75)
-
-data["Temprature"]=np.where(data["Temprature"]<quantile1,quantile1,data["Temprature"])
-data["Temprature"]=np.where(data["Temprature"]>quantile2,quantile2,data["Temprature"])
-t = round(data['Temprature'].skew(),10)
-#print(t)
-
-quantile1=data["Colour"].quantile(0.25)
-quantile2=data["Colour"].quantile(0.75)
-
-data["Colour"]=np.where(data["Colour"]<quantile1,quantile1,data["Colour"])
-data["Colour"]=np.where(data["Colour"]>quantile2,quantile2,data["Colour"])
-c = round(data['Colour'].skew(),10)
-#print(c)
-
-quantile1=data["pH"].quantile(0.25)
-quantile2=data["pH"].quantile(0.75)
-
-data["pH"]=np.where(data["pH"]<quantile1,quantile1,data["pH"])
-data["pH"]=np.where(data["pH"]>quantile2,quantile2,data["pH"])
-ph = round(data['pH'].skew(),10)
 #print(ph)
 
 # plt.figure(figsize=(7, 3))
@@ -57,23 +38,35 @@ from sklearn.metrics import confusion_matrix
 from sklearn.model_selection import train_test_split
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.metrics import accuracy_score
+from sklearn.model_selection import train_test_split, GridSearchCV
 
 X=data.drop(['Grade'],axis=1)
 y=data['Grade']
-X_train,X_test,y_train,y_test = train_test_split(X,y,test_size=0.3,random_state=143)
+X_train,X_test,y_train,y_test = train_test_split(X,y,test_size=0.3, stratify=y, random_state=143)
 
-
-# Set the number of principal components to retain (e.g., 2 components here)
-n_components = 7
-pca = PCA(n_components=n_components)
+# Apply PCA with 90% variance retention
+pca = PCA(0.90)
 
 # Fit PCA on the training data and transform both train and test data
 X_train_pca = pca.fit_transform(X_train)
 X_test_pca = pca.transform(X_test)
 
-# Step 3: Train the Decision Tree classifier on the PCA-transformed training data
-clf = DecisionTreeClassifier(random_state=143)
-clf.fit(X_train_pca, y_train)
+# Step 3:Train Decision Tree Classifier with optimized pruning
+# clf = DecisionTreeClassifier(max_depth=8, min_samples_split=5, min_samples_leaf=3, class_weight="balanced", random_state=143)
+# clf.fit(X_train_pca, y_train)
+
+# Define parameter grid for GridSearchCV
+param_grid = {
+    'max_depth': [5, 8, 10],
+    'min_samples_split': [2, 5, 10],
+    'min_samples_leaf': [1, 3, 5]
+}
+
+# Use GridSearchCV to find the best hyperparameters
+grid_search = GridSearchCV(DecisionTreeClassifier(random_state=143), param_grid, cv=5, scoring='accuracy', n_jobs=-1)
+grid_search.fit(X_train_pca, y_train)
+clf = grid_search.best_estimator_
+print("Best parameters:", grid_search.best_params_)
 
 # Step 4: Predict on the test data
 y_pred = clf.predict(X_test_pca)
